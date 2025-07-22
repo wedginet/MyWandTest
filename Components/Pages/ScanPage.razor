@@ -1,0 +1,39 @@
+﻿@page "/scan"
+@using MyWandTest.Services
+@inject IBluetoothService BluetoothService
+
+<h3>Scan Input</h3>
+
+<input @bind="currentInput" @bind:event="oninput" @ref="scanInputRef" />
+<button @onclick="AddToList">Add</button>
+
+<ul>
+    @foreach (var item in scannedItems)
+    {
+        <li>@item</li>
+    }
+</ul>
+
+@code {
+    string currentInput = "";
+    List<string> scannedItems = new();
+    ElementReference scanInputRef;
+
+    protected override void OnInitialized()
+    {
+        BluetoothService.DataReceived += (s, value) =>
+        {
+            currentInput = value;
+            StateHasChanged();
+        };
+    }
+
+    private void AddToList()
+    {
+        if (!string.IsNullOrWhiteSpace(currentInput))
+        {
+            scannedItems.Add(currentInput);
+            currentInput = "";
+        }
+    }
+}

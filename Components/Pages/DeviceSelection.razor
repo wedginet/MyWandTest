@@ -1,0 +1,87 @@
+﻿@page "/deviceselection"
+@using MyWandTest.Services
+@inject IBluetoothService BluetoothService
+@inject NavigationManager Nav
+
+
+@if (showError)
+{
+    <div class="popup-overlay">
+        <div class="popup-error">
+            <h4>Error</h4>
+            <p>@errorMessage</p>
+            <button @onclick="ClosePopup">Close</button>
+        </div>
+    </div>
+}
+<h1>Select Scanner Device</h1>
+
+<select @onchange="OnDeviceSelected">
+    <option value="">-- Select Device --</option>
+    @foreach (var device in devices)
+
+    {
+        <option value="@device">@device</option>
+    }
+</select>
+
+<button @onclick="ConnectToDevice" disabled="@string.IsNullOrEmpty(selectedDevice)">Connect</button>
+
+<p>@status</p>
+
+@code {
+    List<string> devices = new();
+    string selectedDevice = "";
+    string status = "";
+    private bool showError = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await MainThread.InvokeOnMainThreadAsync(async () =>
+            {
+                var granted = await PermissionsHelper.RequestBluetoothPermissionsAsync();
+                if (!granted)
+                {
+                    status = "Bluetooth permissions denied.";
+                    return;
+                }
+
+                var paired = await BluetoothService.GetPairedDeviceNamesAsync();
+                devices = paired.ToList();
+            });
+        }
+        catch (Exception ex)
+        {
+            devices = new List<string>();
+            ShowError(ex.Message);
+        }
+    }
+
+    private void OnDeviceSelected(ChangeEventArgs e)
+    {
+        selectedDevice = e.Value?.ToString() ?? "";
+    }
+
+    private async Task ConnectToDevice()
+    {
+        status = "Connecting...";
+        var result = await BluetoothService.ConnectToDeviceAsync(selectedDevice);
+        status = result ? "Connected" : "Failed to connect";
+        if (result)
+            Nav.NavigateTo("/scan");
+    }
+
+    public void ShowError(string message)
+    {
+        errorMessage = message;
+        showError = true;
+    }
+
+    private void ClosePopup()
+    {
+        showError = false;
+    }
+}

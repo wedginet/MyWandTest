@@ -23,6 +23,7 @@ namespace MyWandTest
     		builder.Services.AddBlazorWebViewDeveloperTools();
     		builder.Logging.AddDebug();
 #endif
+            builder.Services.AddSingleton<SessionService>();
 
 #if ANDROID
             builder.Services.AddSingleton<IBluetoothService, BluetoothService_Android>();

@@ -1,7 +1,4 @@
-﻿using System;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+﻿using MyWandTest.Models;
 
 namespace MyWandTest.Services
 {
@@ -9,13 +6,13 @@ namespace MyWandTest.Services
     {
         event EventHandler<string> DataReceived;
         event EventHandler<bool> ConnectionChanged;
-    
+
         Task<IEnumerable<BluetoothDevice>> GetPairedDevicesAsync();
         Task<bool> ConnectToDeviceAsync(BluetoothDevice device);
         Task DisconnectAsync();
+        Task<BluetoothDevice?> TryReconnectLastDeviceAsync();
+
         BluetoothDevice? ConnectedDevice { get; }
         bool IsConnected { get; }
-    
-        Task<BluetoothDevice?> TryReconnectLastDeviceAsync();
     }
 }

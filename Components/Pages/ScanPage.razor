@@ -1,9 +1,15 @@
 @page "/scan"
 @using MyWandTest.Services
+@using MyWandTest.Models
+@using System.Text
+
 @inject IBluetoothService BluetoothService
 @inject IJSRuntime JS
+@inject SessionService SessionService
 
 <h3>Scan Input</h3>
+
+<p><strong>Connection:</strong> @connectionStatus</p>
 
 <input @bind="currentInput" @bind:event="oninput" @ref="scanInputRef" />
 <button @onclick="AddToList">Add</button>
@@ -45,29 +51,63 @@
     </div>
 }
 
-<audio id="successSound" src="sounds/success.mp3" preload="auto"></audio>
+<audio id="successSound" src="css/sounds/beep.mp3" preload="auto"></audio>
 
 @code {
     string currentInput = "";
-    List<string> scannedItems = new();
-    List<string> actualTags = new();
+    private List<string> scannedItems => SessionService.RawScans;
+    private List<string> actualTags => SessionService.ParsedScans;
     string currentTag = "";
     bool showPopup = false;
     bool isFirstRender = true;
+    string connectionStatus = "Connecting...";
 
     ElementReference scanInputRef;
     private StringBuilder scanBuffer = new();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         BluetoothService.DataReceived += OnDataReceived;
+        BluetoothService.ConnectionChanged += OnConnectionChanged;
+
+        if (!BluetoothService.IsConnected)
+        {
+            var reconnected = await BluetoothService.TryReconnectLastDeviceAsync();
+            connectionStatus = reconnected != null
+                ? $"Reconnected to: {reconnected.Name}"
+                : "No device connected";
+        }
+        else
+        {
+            connectionStatus = $"Connected to: {BluetoothService.ConnectedDevice?.Name}";
+        }
+    }
+
+    private async void OnConnectionChanged(object? sender, bool isConnected)
+    {
+        if (!isConnected)
+        {
+            connectionStatus = "Disconnected. Trying to reconnect...";
+            StateHasChanged();
+
+            var retry = await BluetoothService.TryReconnectLastDeviceAsync();
+            connectionStatus = retry != null
+                ? $"Auto-reconnected to: {retry.Name}"
+                : "Failed to reconnect";
+        }
+        else
+        {
+            connectionStatus = $"Connected to: {BluetoothService.ConnectedDevice?.Name}";
+        }
+
+        StateHasChanged();
     }
 
     private void OnDataReceived(object? sender, string value)
     {
         InvokeAsync(() =>
         {
-            scannedItems.Add(value); // Always record raw
+            SessionService.AddRaw(value);
             scanBuffer.Append(value);
 
             string digits = new string(scanBuffer.ToString().Where(char.IsDigit).ToArray());
@@ -78,7 +118,8 @@
 
                 if (!actualTags.Contains(tag))
                 {
-                    actualTags.Add(tag);
+                    SessionService.AddParsed(tag);
+                    scanBuffer.Clear();
 
                     if (!showPopup)
                     {
@@ -86,6 +127,8 @@
                         showPopup = true;
                         PlaySuccessSound();
                         TriggerVibration();
+
+                        StateHasChanged();
                     }
                 }
 
@@ -127,9 +170,20 @@
     {
         if (!string.IsNullOrWhiteSpace(currentInput))
         {
-            scannedItems.Add(currentInput);
-            scanBuffer.Append(currentInput);
-            OnDataReceived(this, "");
+            if (!actualTags.Contains(currentInput))
+            {
+                SessionService.AddParsed(currentInput);
+
+                if (!showPopup)
+                {
+                    currentTag = currentInput;
+                    showPopup = true;
+                    PlaySuccessSound();
+                    TriggerVibration();
+
+                    StateHasChanged();
+                }
+            }
             currentInput = "";
         }
     }
@@ -138,8 +192,8 @@
     {
         showPopup = false;
         StateHasChanged();
-        await Task.Delay(100); // Ensure DOM is ready
-        await scanInputRef.FocusAsync(); // Refocus input
+        await Task.Delay(100);
+        await scanInputRef.FocusAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

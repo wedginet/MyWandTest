@@ -1,8 +1,11 @@
 ﻿@page "/deviceselection"
 @using MyWandTest.Services
+@using MyWandTest.Models
+
 @inject IBluetoothService BluetoothService
 @inject NavigationManager Nav
 
+<h1>Select Scanner Device</h1>
 
 @if (showError)
 {
@@ -14,24 +17,24 @@
         </div>
     </div>
 }
-<h1>Select Scanner Device</h1>
 
 <select @onchange="OnDeviceSelected">
     <option value="">-- Select Device --</option>
     @foreach (var device in devices)
-
     {
-        <option value="@device">@device</option>
+        <option value="@device.Id" selected="@IsSelected(device.Id)">
+            @(BluetoothService.ConnectedDevice?.Id == device.Id ? "[Connected] " : "") @device.Name
+        </option>
     }
 </select>
 
-<button @onclick="ConnectToDevice" disabled="@string.IsNullOrEmpty(selectedDevice)">Connect</button>
+<button @onclick="ConnectToDevice" disabled="@string.IsNullOrEmpty(selectedDeviceId)">Connect</button>
 
 <p>@status</p>
 
 @code {
-    List<string> devices = new();
-    string selectedDevice = "";
+    List<BluetoothDevice> devices = new();
+    string selectedDeviceId = "";
     string status = "";
     private bool showError = false;
     private string errorMessage = string.Empty;
@@ -49,32 +52,63 @@
                     return;
                 }
 
-                var paired = await BluetoothService.GetPairedDeviceNamesAsync();
+                var paired = await BluetoothService.GetPairedDevicesAsync();
                 devices = paired.ToList();
+
+                var lastDeviceId = BluetoothStorage.GetLastDeviceId();
+                selectedDeviceId = BluetoothService.ConnectedDevice?.Id ?? lastDeviceId ?? "";
             });
         }
         catch (Exception ex)
         {
-            devices = new List<string>();
-            ShowError(ex.Message);
+            ShowError("Bluetooth Init Failed: " + ex.Message);
         }
     }
 
     private void OnDeviceSelected(ChangeEventArgs e)
     {
-        selectedDevice = e.Value?.ToString() ?? "";
+        selectedDeviceId = e.Value?.ToString() ?? "";
     }
 
     private async Task ConnectToDevice()
     {
         status = "Connecting...";
-        var result = await BluetoothService.ConnectToDeviceAsync(selectedDevice);
-        status = result ? "Connected" : "Failed to connect";
-        if (result)
-            Nav.NavigateTo("/scan");
+        try
+        {
+            var selectedDevice = devices.FirstOrDefault(d => d.Id == selectedDeviceId);
+            if (selectedDevice == null)
+            {
+                ShowError("Device not found.");
+                return;
+            }
+
+            if (BluetoothService.IsConnected &&
+                BluetoothService.ConnectedDevice?.Id != selectedDevice.Id)
+            {
+                await BluetoothService.DisconnectAsync();
+            }
+
+            var result = await BluetoothService.ConnectToDeviceAsync(selectedDevice);
+            status = result ? $"Connected to {selectedDevice.Name}" : "Failed to connect";
+
+            if (result)
+            {
+                BluetoothStorage.SaveLastDeviceId(selectedDevice.Id);
+                Nav.NavigateTo("/scan");
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowError("Connection Failed: " + ex.Message);
+        }
     }
 
-    public void ShowError(string message)
+    private bool IsSelected(string deviceId)
+    {
+        return selectedDeviceId == deviceId;
+    }
+
+    private void ShowError(string message)
     {
         errorMessage = message;
         showError = true;

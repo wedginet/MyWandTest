@@ -24,7 +24,20 @@
     </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+        window.playSuccessSound = () => {
+            const audio = document.getElementById('successSound');
+            if (audio) {
+                audio.play().catch(e => console.warn("Audio play failed:", e));
+            }
+        };
 
+        window.vibrateDevice = () => {
+            if (navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]); // vibrate - pause - vibrate
+            }
+        };
+    </script>
 </body>
 
 </html>

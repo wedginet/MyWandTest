@@ -1,5 +1,20 @@
 ﻿@page "/"
+@inject SessionService SessionService
+@inject NavigationManager navigate
+
+@using MyWandTest.Services
 
 <h1>Are you ready to scan!</h1>
 
 Welcome to your Wand Scanner Test app.
+
+
+<button @onclick="NewSession">New Session</button>
+
+@code{
+    private void NewSession()
+    {
+        SessionService.Clear();
+        navigate.NavigateTo("/scan");
+    }
+}

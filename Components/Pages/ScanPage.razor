@@ -1,4 +1,4 @@
-﻿@page "/scan"
+@page "/scan"
 @using MyWandTest.Services
 @inject IBluetoothService BluetoothService
 
@@ -7,6 +7,7 @@
 <input @bind="currentInput" @bind:event="oninput" @ref="scanInputRef" />
 <button @onclick="AddToList">Add</button>
 
+<h4>Raw Scans</h4>
 <ul>
     @foreach (var item in scannedItems)
     {
@@ -14,18 +15,67 @@
     }
 </ul>
 
+<h4>Actual Tags</h4>
+<ul>
+    @foreach (var tag in actualTags)
+    {
+        <li>@tag</li>
+    }
+</ul>
+
+@if (showPopup)
+{
+    <div class="popup">
+        <div class="popup-content">
+            <h5>New Tag Found</h5>
+            <p>@currentTag</p>
+            <button @onclick="ClosePopup">Save</button>
+        </div>
+    </div>
+}
+
 @code {
     string currentInput = "";
     List<string> scannedItems = new();
+    List<string> actualTags = new();
     ElementReference scanInputRef;
+
+    string currentTag = "";
+    bool showPopup = false;
 
     protected override void OnInitialized()
     {
-        BluetoothService.DataReceived += (s, value) =>
+        BluetoothService.DataReceived += OnDataReceived;
+    }
+
+    private void OnDataReceived(object? sender, string value)
+    {
+        InvokeAsync(() =>
         {
-            currentInput = value;
+            scannedItems.Add(value); // Always store raw data
+            ParseAndHandleTag(value);
             StateHasChanged();
-        };
+        });
+    }
+
+    private void ParseAndHandleTag(string input)
+    {
+        // Remove all non-numeric characters
+        string digitsOnly = new string(input.TakeWhile(c => c != '\r' && c != '\n')
+                                       .Where(char.IsDigit)
+                                       .ToArray());
+
+        // If it's exactly 15 digits, consider it a valid tag
+        if (digitsOnly.Length == 15 && !actualTags.Contains(digitsOnly))
+        {
+            actualTags.Add(digitsOnly);
+
+            if (!showPopup)
+            {
+                currentTag = digitsOnly;
+                showPopup = true;
+            }
+        }
     }
 
     private void AddToList()
@@ -33,7 +83,13 @@
         if (!string.IsNullOrWhiteSpace(currentInput))
         {
             scannedItems.Add(currentInput);
+            ParseAndHandleTag(currentInput);
             currentInput = "";
         }
+    }
+
+    private void ClosePopup()
+    {
+        showPopup = false;
     }
 }

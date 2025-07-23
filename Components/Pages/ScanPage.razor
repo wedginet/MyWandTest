@@ -1,27 +1,38 @@
 @page "/scan"
 @using MyWandTest.Services
 @inject IBluetoothService BluetoothService
+@inject IJSRuntime JS
 
 <h3>Scan Input</h3>
 
 <input @bind="currentInput" @bind:event="oninput" @ref="scanInputRef" />
 <button @onclick="AddToList">Add</button>
 
-<h4>Raw Scans</h4>
-<ul>
-    @foreach (var item in scannedItems)
-    {
-        <li>@item</li>
-    }
-</ul>
+<div style="display: flex; gap: 20px; margin-top: 20px;">
+    <div style="flex: 1;">
+        <h4>Raw Scans</h4>
+        <div style="height: 200px; overflow-y: auto; border: 1px solid gray; padding: 5px;">
+            <ul>
+                @foreach (var item in scannedItems)
+                {
+                    <li>@item</li>
+                }
+            </ul>
+        </div>
+    </div>
 
-<h4>Actual Tags</h4>
-<ul>
-    @foreach (var tag in actualTags)
-    {
-        <li>@tag</li>
-    }
-</ul>
+    <div style="flex: 1;">
+        <h4>Actual Tags</h4>
+        <div style="height: 200px; overflow-y: auto; border: 1px solid gray; padding: 5px;">
+            <ul>
+                @foreach (var tag in actualTags)
+                {
+                    <li>@tag</li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>
 
 @if (showPopup)
 {
@@ -34,14 +45,18 @@
     </div>
 }
 
+<audio id="successSound" src="sounds/success.mp3" preload="auto"></audio>
+
 @code {
     string currentInput = "";
     List<string> scannedItems = new();
     List<string> actualTags = new();
-    ElementReference scanInputRef;
-
     string currentTag = "";
     bool showPopup = false;
+    bool isFirstRender = true;
+
+    ElementReference scanInputRef;
+    private StringBuilder scanBuffer = new();
 
     protected override void OnInitialized()
     {
@@ -52,30 +67,60 @@
     {
         InvokeAsync(() =>
         {
-            scannedItems.Add(value); // Always store raw data
-            ParseAndHandleTag(value);
+            scannedItems.Add(value); // Always record raw
+            scanBuffer.Append(value);
+
+            string digits = new string(scanBuffer.ToString().Where(char.IsDigit).ToArray());
+
+            while (digits.Length >= 15)
+            {
+                var tag = digits.Substring(0, 15);
+
+                if (!actualTags.Contains(tag))
+                {
+                    actualTags.Add(tag);
+
+                    if (!showPopup)
+                    {
+                        currentTag = tag;
+                        showPopup = true;
+                        PlaySuccessSound();
+                        TriggerVibration();
+                    }
+                }
+
+                int index = IndexOfDigits(scanBuffer.ToString(), tag);
+                if (index >= 0)
+                {
+                    scanBuffer.Remove(0, index + tag.Length);
+                    digits = new string(scanBuffer.ToString().Where(char.IsDigit).ToArray());
+                }
+                else
+                {
+                    break;
+                }
+            }
+
             StateHasChanged();
         });
     }
 
-    private void ParseAndHandleTag(string input)
+    private int IndexOfDigits(string input, string digits)
     {
-        // Remove all non-numeric characters
-        string digitsOnly = new string(input.TakeWhile(c => c != '\r' && c != '\n')
-                                       .Where(char.IsDigit)
-                                       .ToArray());
-
-        // If it's exactly 15 digits, consider it a valid tag
-        if (digitsOnly.Length == 15 && !actualTags.Contains(digitsOnly))
+        var digitIndex = 0;
+        for (int i = 0; i < input.Length; i++)
         {
-            actualTags.Add(digitsOnly);
-
-            if (!showPopup)
+            if (char.IsDigit(input[i]))
             {
-                currentTag = digitsOnly;
-                showPopup = true;
+                if (input[i] != digits[digitIndex])
+                    return -1;
+
+                digitIndex++;
+                if (digitIndex == digits.Length)
+                    return i - digits.Length + 1;
             }
         }
+        return -1;
     }
 
     private void AddToList()
@@ -83,13 +128,36 @@
         if (!string.IsNullOrWhiteSpace(currentInput))
         {
             scannedItems.Add(currentInput);
-            ParseAndHandleTag(currentInput);
+            scanBuffer.Append(currentInput);
+            OnDataReceived(this, "");
             currentInput = "";
         }
     }
 
-    private void ClosePopup()
+    private async void ClosePopup()
     {
         showPopup = false;
+        StateHasChanged();
+        await Task.Delay(100); // Ensure DOM is ready
+        await scanInputRef.FocusAsync(); // Refocus input
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && isFirstRender)
+        {
+            isFirstRender = false;
+            await scanInputRef.FocusAsync();
+        }
+    }
+
+    private async void PlaySuccessSound()
+    {
+        await JS.InvokeVoidAsync("playSuccessSound");
+    }
+
+    private async void TriggerVibration()
+    {
+        await JS.InvokeVoidAsync("vibrateDevice");
     }
 }

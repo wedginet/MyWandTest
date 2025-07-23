@@ -7,9 +7,15 @@ namespace MyWandTest.Services
 {
     public interface IBluetoothService
     {
-        Task<IEnumerable<string>> GetPairedDeviceNamesAsync();
-        Task<bool> ConnectToDeviceAsync(string deviceName);
-        event EventHandler<string>? DataReceived;
-        void Disconnect();
+        event EventHandler<string> DataReceived;
+        event EventHandler<bool> ConnectionChanged;
+    
+        Task<IEnumerable<BluetoothDevice>> GetPairedDevicesAsync();
+        Task<bool> ConnectToDeviceAsync(BluetoothDevice device);
+        Task DisconnectAsync();
+        BluetoothDevice? ConnectedDevice { get; }
+        bool IsConnected { get; }
+    
+        Task<BluetoothDevice?> TryReconnectLastDeviceAsync();
     }
 }

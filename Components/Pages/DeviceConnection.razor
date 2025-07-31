@@ -1,0 +1,62 @@
+@page "/deviceselection"
+@using AHS.Core.Bluetooth
+@inject AHS.Application.Bluetooth.IBluetoothService BluetoothService
+
+<h3>Device Connection</h3>
+
+@if (Devices == null)
+{
+    <p><em>Loading devices…</em></p>
+}
+else if (!Devices.Any())
+{
+    <p>No paired devices found.</p>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var device in Devices)
+        {
+            <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                    disabled="@IsConnecting"
+                    @onclick="() => ConnectDevice(device.Id)">
+                @device.Name
+                @if (IsConnecting && device.Id == ConnectingDeviceId)
+                {
+                    <span class="spinner-border spinner-border-sm ms-2" role="status" aria-hidden="true"></span>
+                }
+            </button>
+        }
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(StatusMessage))
+{
+    <div class="alert alert-info mt-2">@StatusMessage</div>
+}
+
+@code {
+    private List<PairedDevice>? Devices;
+    private bool IsConnecting;
+    private string? ConnectingDeviceId;
+    private string? StatusMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Devices = (await BluetoothService.GetPairedDevicesAsync()).ToList();
+    }
+
+    private async Task ConnectDevice(string deviceId)
+    {
+        IsConnecting = true;
+        ConnectingDeviceId = deviceId;
+        StatusMessage = null;
+
+        var success = await BluetoothService.ConnectAsync(deviceId);
+
+        StatusMessage = success
+            ? $"Connected to {Devices?.FirstOrDefault(d => d.Id == deviceId)?.Name}!"
+            : "Connection failed.";
+        IsConnecting = false;
+    }
+}
